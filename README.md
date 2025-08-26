@@ -24,14 +24,13 @@ $ pip3 install --no-deps <path_to_tar>/gbm_data_tools-1.1.1.tar
 _Heapy_ generates the response matrix files for Fermi GBM by invoking [`gbm_drm_gen`](https://github.com/grburgess/gbm_drm_gen). It is recommended to install my forked Python packages, which have been fine-tuned to resolve compatibility issues with newer versions of `numpy` and `astropy`, and to use TTE data instead of CSPEC data. The specific installation procedure is as follows:
 
 ```bash
-$ git clone https://github.com/jyangch/responsum.git
-$ pip3 install ./responsum
+git clone https://github.com/Charon0922/responsum.git
+pip install ./responsum
+git clone https://github.com/Charon0922/gbmgeometry.git
+pip install ./gbmgeometry
 
-$ git clone https://github.com/jyangch/gbmgeometry.git
-$ pip3 install ./gbmgeometry
-
-$ git clone https://github.com/jyangch/gbm_drm_gen.git
-$ pip3 install ./gbm_drm_gen
+git clone https://github.com/Charon0922/gbm_drm_gen.git
+pip install ./gbm_drm_gen
 ```
 
 ## Installation
