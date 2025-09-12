@@ -28,7 +28,7 @@ class gbmRetrieve(Retrieve):
     def from_burst(cls, burstid, datapath=None, skip_tte=False, skip_healpix=False):
         
         if datapath is None:
-            datapath = '/Users/junyang/Data/fermi/data/gbm/bursts'
+            datapath = '/Users/xinxiang/Data/fermi/data/gbm/bursts'
             
         dataurl = 'ftp://129.164.179.23/fermi/data/gbm/bursts'
 
@@ -89,7 +89,7 @@ class gbmRetrieve(Retrieve):
     def from_utc(cls, utc, t1, t2, datapath=None, skip_tte=False, skip_poshist=False):
         
         if datapath is None:
-            datapath = '/Users/junyang/Data/fermi/data/gbm/daily'
+            datapath = '/Users/xinxiang/Data/fermi/data/gbm/daily'
             
         dataurl = 'ftp://129.164.179.23/fermi/data/gbm/daily'
         
@@ -106,7 +106,6 @@ class gbmRetrieve(Retrieve):
 
         year_start, month_start, day_start, hour_start = list(tstart.ymdhms)[:4]
         year_stop, month_stop, day_stop, hour_stop = list(tstop.ymdhms)[:4]
-
         start = '%d-%02d-%02d %02d' % (year_start, month_start, day_start, hour_start)+':00:00'
         stop = '%d-%02d-%02d %02d' % (year_stop, month_stop, day_stop, hour_stop) + ':00:00'
         dates_perH = pd.date_range(start, stop, freq='h')
@@ -189,7 +188,7 @@ class gecamRetrieve(Retrieve):
     def from_burst(cls, burstid, datapath=None):
         
         if datapath is None:
-            datapath = '/Users/junyang/Data/gecam/bursts'
+            datapath = '/Users/xinxiang/Data/gecam/bursts'
 
         year = '20' + burstid[2:4]
         month = burstid[4:6]
@@ -227,7 +226,7 @@ class gecamRetrieve(Retrieve):
     def from_utc(cls, utc, t1, t2, datapath=None):
         
         if datapath is None:
-            datapath = '/Users/junyang/Data/gecam/daily'
+            datapath = '/Users/xinxiang/Data/gecam/daily'
             
         ff = FileFinder(local_dir=datapath)
 
@@ -307,7 +306,7 @@ class gridRetrieve(Retrieve):
     def from_utc(cls, utc, t1, t2, det, datapath=None):
         
         if datapath is None:
-            datapath = '/Users/junyang/Data/grid/G05'
+            datapath = '/Users/xinxiang/Data/grid/G05'
             
         ff = FileFinder(local_dir=datapath)
 
@@ -375,7 +374,7 @@ class epRetrieve(Retrieve):
     def from_wxtobs(cls, obsid, srcid, datapath=None): 
         
         if datapath is None:
-            datapath = '/Users/junyang/Data/ep/WXT'
+            datapath = '/Users/xinxiang/Data/ep/WXT'
             
         local_dir = datapath + '/' + obsid
         
@@ -428,7 +427,7 @@ class epRetrieve(Retrieve):
     def from_fxtobs(cls, obsid, module, datapath=None): 
         
         if datapath is None:
-            datapath = '/Users/junyang/Data/ep/FXT'
+            datapath = '/Users/xinxiang/Data/ep/FXT'
             
         local_dir = datapath + '/' + obsid
         
@@ -458,7 +457,7 @@ class epRetrieve(Retrieve):
     def from_fxtsrc(cls, obsid, module, datapath=None):
         
         if datapath is None:
-            datapath = '/Users/junyang/Data/ep/FXT'
+            datapath = '/Users/xinxiang/Data/ep/FXT'
             
         local_dir = datapath + '/' + obsid
         
@@ -512,7 +511,7 @@ class swiftRetrieve(Retrieve):
         assert mode in ['wt', 'pc'], 'xrt mode only allowed to be wt or pc'
         
         if datapath is None:
-            datapath = '/Users/junyang/Data/swift'
+            datapath = '/home/xiniang/Data/swift'
         
         local_dir = datapath + '/' + obsid
         
@@ -558,7 +557,7 @@ class swiftRetrieve(Retrieve):
     def from_batobs(cls, obsid, datapath=None):
         
         if datapath is None:
-            datapath = '/Users/junyang/Data/swift'
+            datapath = '/home/xiniang/Data/swift'
             
         local_dir = datapath + '/' + obsid
         
