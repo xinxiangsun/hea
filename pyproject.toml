@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "heapyx"
+version = "0.1.7"
+description = "High-energy (X-ray and gamma-ray) astronomical data analysis tools"
+readme = {file = "README.md", content-type = "text/markdown"}
+requires-python = ">=3.8"
+license = {text = "GPLv3"}
+authors = [
+    {name = "Jun Yang", email = "jyang@smail.nju.edu.cn"}
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Topic :: Scientific/Engineering :: Astronomy",
+]
+dependencies = [
+    "numpy>=1.20.4",
+    "pandas>=1.4.2",
+    "scipy>=1.8.0",
+    "astropy>=5.2.2",
+    "matplotlib>=3.2.1",
+    "tqdm>=4.64.1",
+    "plotly>=5.22.0",
+    "pybaselines>=1.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/jyangch/heapy"
+"Source Code" = "https://github.com/jyangch/heapy"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = ["examples*"]
+
+[tool.setuptools.package-data]
+heapy = [
+    "docs/*",
+    "docs/**/*",
+]
