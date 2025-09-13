@@ -6,7 +6,7 @@ import pandas as pd
 from astropy.time import Time, TimeDelta
 from .filefinder import FileFinder
 from ..util.data import msg_format
-
+import os 
 
 
 class Retrieve(object):
@@ -14,21 +14,27 @@ class Retrieve(object):
     def __init__(self, rtv_res):
         
         self.rtv_res = rtv_res
-
-
+        self._home = os.environ.get("HOME")
+        if self._home is None:
+            raise EnvironmentError("HOME environment variable is not set.")
+        self._dir = os.path.join(self._home, 'research')
 
 class gbmRetrieve(Retrieve):
 
     def __init__(self, rtv_res):
         
         super().__init__(rtv_res)
+        
 
 
     @classmethod
     def from_burst(cls, burstid, datapath=None, skip_tte=False, skip_healpix=False):
         
         if datapath is None:
-            datapath = '/Users/xinxiang/Data/fermi/data/gbm/bursts'
+            home = os.environ.get("HOME")
+            if home is None:
+                raise EnvironmentError("HOME environment variable is not set.")
+            datapath = os.path.join(home ,'research/Data/fermi/data/gbm/bursts')
             
         dataurl = 'ftp://129.164.179.23/fermi/data/gbm/bursts'
 
@@ -89,7 +95,10 @@ class gbmRetrieve(Retrieve):
     def from_utc(cls, utc, t1, t2, datapath=None, skip_tte=False, skip_poshist=False):
         
         if datapath is None:
-            datapath = '/Users/xinxiang/Data/fermi/data/gbm/daily'
+            home = os.environ.get("HOME")
+            if home is None:
+                raise EnvironmentError("HOME environment variable is not set.")
+            datapath = os.path.join(home ,'research/Data/fermi/data/gbm/daily')
             
         dataurl = 'ftp://129.164.179.23/fermi/data/gbm/daily'
         
@@ -188,7 +197,10 @@ class gecamRetrieve(Retrieve):
     def from_burst(cls, burstid, datapath=None):
         
         if datapath is None:
-            datapath = '/Users/xinxiang/Data/gecam/bursts'
+            home = os.environ.get("HOME")
+            if home is None:
+                raise EnvironmentError("HOME environment variable is not set.")
+            datapath = os.path.join(home, 'research/Data/gecam/bursts')
 
         year = '20' + burstid[2:4]
         month = burstid[4:6]
@@ -226,7 +238,10 @@ class gecamRetrieve(Retrieve):
     def from_utc(cls, utc, t1, t2, datapath=None):
         
         if datapath is None:
-            datapath = '/Users/xinxiang/Data/gecam/daily'
+            home = os.environ.get("HOME")
+            if home is None:
+                raise EnvironmentError("HOME environment variable is not set.")
+            datapath = os.path.join(home, 'research/Data/gecam/daily')
             
         ff = FileFinder(local_dir=datapath)
 
@@ -306,7 +321,10 @@ class gridRetrieve(Retrieve):
     def from_utc(cls, utc, t1, t2, det, datapath=None):
         
         if datapath is None:
-            datapath = '/Users/xinxiang/Data/grid/G05'
+            home = os.environ.get("HOME")
+            if home is None:
+                raise EnvironmentError("HOME environment variable is not set.")
+            datapath = os.path.join(home, 'research/Data/grid/G05')
             
         ff = FileFinder(local_dir=datapath)
 
@@ -374,7 +392,10 @@ class epRetrieve(Retrieve):
     def from_wxtobs(cls, obsid, srcid, datapath=None): 
         
         if datapath is None:
-            datapath = '/Users/xinxiang/Data/ep/WXT'
+            home = os.environ.get("HOME")
+            if home is None:
+                raise EnvironmentError("HOME environment variable is not set.")
+            datapath = os.path.join(home , 'research/Data/ep/WXT')
             
         local_dir = datapath + '/' + obsid
         
@@ -427,7 +448,10 @@ class epRetrieve(Retrieve):
     def from_fxtobs(cls, obsid, module, datapath=None): 
         
         if datapath is None:
-            datapath = '/Users/xinxiang/Data/ep/FXT'
+            home = os.environ.get("HOME")
+            if home is None:
+                raise EnvironmentError("HOME environment variable is not set.")
+            datapath = os.path.join(home , 'research//Data/ep/FXT')
             
         local_dir = datapath + '/' + obsid
         
@@ -457,7 +481,10 @@ class epRetrieve(Retrieve):
     def from_fxtsrc(cls, obsid, module, datapath=None):
         
         if datapath is None:
-            datapath = '/Users/xinxiang/Data/ep/FXT'
+            home = os.environ.get("HOME")
+            if home is None:
+                raise EnvironmentError("HOME environment variable is not set.")
+            datapath = os.path.join(home , 'research/Data/ep/FXT')
             
         local_dir = datapath + '/' + obsid
         
@@ -511,7 +538,11 @@ class swiftRetrieve(Retrieve):
         assert mode in ['wt', 'pc'], 'xrt mode only allowed to be wt or pc'
         
         if datapath is None:
-            datapath = '/home/xiniang/Data/swift'
+            home = os.environ.get("HOME")
+            if home is None:
+                raise EnvironmentError("HOME environment variable is not set.")
+            datapath = os.path.join(home , 'research/Data/swift')
+
         
         local_dir = datapath + '/' + obsid
         
@@ -556,8 +587,13 @@ class swiftRetrieve(Retrieve):
     @classmethod
     def from_batobs(cls, obsid, datapath=None):
         
+
+               
         if datapath is None:
-            datapath = '/home/xiniang/Data/swift'
+            home = os.environ.get("HOME")
+            if home is None:
+                raise EnvironmentError("HOME environment variable is not set.")
+            datapath = os.path.join(home , 'research/Data/swift')
             
         local_dir = datapath + '/' + obsid
         
