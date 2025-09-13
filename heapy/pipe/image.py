@@ -15,7 +15,7 @@ from ..util.file import copy
 from ..util.data import json_dump, rebin, union
 from ..util.time import ep_met_to_utc, ep_utc_to_met
 from ..util.time import swift_met_to_utc, swift_utc_to_met
-
+import gc
 
 
 class Image(object):
@@ -433,6 +433,8 @@ class Image(object):
         if show: fig.show()
         fig.write_html(savepath + '/image.html')
         json_dump(fig.to_dict(), savepath + '/image.json')
+        del fig 
+        gc.collect()
 
 
     @property

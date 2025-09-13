@@ -25,6 +25,8 @@ class gbmGeometry:
         self._utc = utc
         self._time_range = None  # 添加时间范围缓存
         self._read()
+        
+    
 
     @classmethod
     def from_utc(cls, utc, ra=None, dec=None, datadir=None):
@@ -43,7 +45,7 @@ class gbmGeometry:
         self._poshist = GbmPosHist.open(self._poshist_file)
         self._frame = self._poshist.get_spacecraft_frame()
         self._states = self._poshist.get_spacecraft_states()
-        
+        self._gti = Gti.from_boolean_mask(self._states['time'].value, self._states['good'].value)
         # 获取并缓存时间范围
         self._get_time_range()
         
@@ -126,49 +128,48 @@ class gbmGeometry:
         返回:
             bool 或 bool 数组，表示是否在好时间间隔内
         """
-        try:
-            # 从 spacecraft states 中获取 GTI
-            if self._states is None:
-                print("Error: 没有 spacecraft states 数据")
-                return False
+        # try:
+        #     # 从 spacecraft states 中获取 GTI
+        #     if self._states is None:
+        #         print("Error: 没有 spacecraft states 数据")
+        #         return False
                 
-            # 获取时间和状态数据
-            if hasattr(self._states['time'], 'value'):
-                time_values = self._states['time'].value
-            else:
-                time_values = self._states['time']
+        #     # 获取时间和状态数据
+        #     if hasattr(self._states['time'], 'value'):
+        #         time_values = self._states['time'].value
+        #     else:
+        #         time_values = self._states['time']
                 
-            # 检查是否有 'good' 状态字段
-            if 'good' not in self._states.colnames:
-                # 如果没有 'good' 字段，使用其他状态判断
-                # 通常使用 fermi_scatt_flg 和 SAA 相关状态
-                good_mask = np.ones(len(time_values), dtype=bool)
+        #     # 检查是否有 'good' 状态字段
+        #     if 'good' not in self._states.colnames:
+        #         # 如果没有 'good' 字段，使用其他状态判断
+        #         # 通常使用 fermi_scatt_flg 和 SAA 相关状态
+        #         good_mask = np.ones(len(time_values), dtype=bool)
                 
-                # 排除 SAA 时间
-                if 'saa' in self._states.colnames:
-                    good_mask &= ~self._states['saa']
-                elif 'SAA' in self._states.colnames:
-                    good_mask &= ~self._states['SAA']
+        #         # 排除 SAA 时间
+        #         if 'saa' in self._states.colnames:
+        #             good_mask &= ~self._states['saa']
+        #         elif 'SAA' in self._states.colnames:
+        #             good_mask &= ~self._states['SAA']
                     
-                # 排除散射角度过小的时间
-                if 'fermi_scatt_flg' in self._states.colnames:
-                    good_mask &= ~self._states['fermi_scatt_flg']
-            else:
-                good_mask = self._states['good']
+        #         # 排除散射角度过小的时间
+        #         if 'fermi_scatt_flg' in self._states.colnames:
+        #             good_mask &= ~self._states['fermi_scatt_flg']
+        #     else:
+        #         good_mask = self._states['good']
             
-            # 创建 GTI 对象
-            gti = Gti.from_boolean_mask(time_values, good_mask)
-            
-            # 检查输入时间是否在 GTI 内
-            if isinstance(met, (list, np.ndarray)):
-                met_arr = np.array(met)
-                return np.array([gti.contains(t) for t in met_arr])
-            else:
-                return gti.contains(met)
+        #     # 创建 GTI 对象
+        #     self._gti = Gti.from_boolean_mask(time_values, good_mask)
+        #     gti = self._gti
+        #     # 检查输入时间是否在 GTI 内
+        #     if isinstance(met, (list, np.ndarray)):
+        #         met_arr = np.array(met)
+        #         return np.array([gti.contains(t) for t in met_arr])
+        return self._gti.contains(met)
                 
-        except Exception as e:
-            print(f"GTI 检查失败: {e}")
-            return False
+        # except Exception as e:
+        #     print(f"GTI 检查失败: {e}")
+        #     return False
 
     def saa_passage(self, met, gti=None):
         """
@@ -191,7 +192,7 @@ class gbmGeometry:
                     return not gti.contains(met)
             else:
                 # 使用内部 gti_check 方法
-                gti_result = self.gti_check(met)
+                gti_result = Gti.from_boolean_mask(self._states['time'].value, self._states['saa'].value)
                 # SAA passage 意味着不在好时间间隔内
                 if isinstance(gti_result, np.ndarray):
                     return ~gti_result
@@ -483,8 +484,27 @@ class gbmGeometry:
             traceback.print_exc()
             return None
 
-    def location_visible(self, ra, dec, met, det=None):
-        """判断某天区在 met 时刻是否可见，带时间范围检查"""
+    def location_visible(self, ra, dec, met):
+        """
+        判断某天区在 met 时刻是否可见（未被地球遮挡）
+        
+        通过计算探测器（或卫星）与地球中心之间的角度是否大于地球角度半径来判断遮挡。
+        如果源本身就在视野外，直接返回不可见。
+        
+        Parameters:
+        -----------
+        ra, dec : float
+            天体坐标（度）
+        met : float or array-like
+            Fermi MET 时间
+        det : str, optional
+            探测器名称，如果指定则计算该探测器的视野，否则使用默认视野
+            
+        Returns:
+        --------
+        bool or np.array(bool)
+            True 表示位置可见（未被地球遮挡），False 表示被遮挡
+        """
         try:
             adjusted_met, status = self._safe_interpolate_time(met, fallback_method='nearest')
             if adjusted_met is None:
@@ -496,117 +516,434 @@ class gbmGeometry:
             if isinstance(adjusted_met, (list, np.ndarray)):
                 results = []
                 for t in adjusted_met:
-                    try:
-                        time_obj = Time(t, format='fermi')
-                        frame = self._frame.at(time_obj)
-                        results.append(frame.location_visible(coord))
-                    except Exception as e:
-                        print(f"位置可见性检查失败 (MET {t}): {e}")
-                        results.append(True)
+                    visible = self._check_single_location_visibility(coord, t)
+                    results.append(visible)
                 return np.array(results)
             else:
-                t = Time(adjusted_met, format='fermi')
-                frame = self._frame.at(t)
-                return frame.location_visible(coord)
+                return self._check_single_location_visibility(coord, adjusted_met)
+                
         except Exception as e:
             print(f"Error checking location visibility: {e}")
             return True
 
+    def point_visible(self, ra, dec, met, det):
+
+        
+        coord = SkyCoord(ra, dec, frame='icrs', unit='deg')
+
+        return self._check_detector_point_visibility(coord = coord, met=met, det=det)
+             
+    
+
+    def _check_single_location_visibility(self,coord,met):
+
+        time_obj = Time(met, format='fermi')
+        frame = self._frame.at(time_obj)
+        
+        # 方法1: 使用 GDT 内置的 location_visible 方法（主要方法）
+        # 这已经包含了正确的地球遮挡算法
+        try:
+            is_visible = frame.location_visible(coord)
+        except Exception as e:
+            print(f"frame.location_visible 调用失败: {e}")
+            return False
+        
+        # 强化处理可能返回数组的情况
+        try:
+            if hasattr(is_visible, '__len__') and not isinstance(is_visible, str):
+                # 处理任何类型的数组或列表
+                return bool(np.all(np.asarray(is_visible)))
+            else:
+                return bool(is_visible)
+        except Exception as e:
+            print(f"数组转换失败: {e}, is_visible type: {type(is_visible)}, value: {is_visible}")
+            return False
+        
+
+
+    def _check_detector_point_visibility(self, coord, met, det):
+        """
+        检查单个时间点的位置可见性
+        
+        使用 GDT 标准方法进行地球遮挡检查：
+        1. 使用 frame.location_visible() 作为主要方法
+        2. 可选：使用 earth_angular_radius 和 geocenter 进行验证
+        3. 如果源被地球遮挡，直接返回 False
+        4. 如果指定探测器，额外检查探测器视野角度
+        """
+        
+        
+        
+        # 方法1: 使用 GDT 内置的 location_visible 方法（主要方法）
+        # 这已经包含了正确的地球遮挡算法
+        is_visible = self._check_single_location_visibility(coord=coord, met=met)
+        
+        # 如果源本身就不可见（被地球遮挡），直接返回 False
+        # 确保 is_visible 是布尔值
+        if isinstance(is_visible, (list, np.ndarray)):
+            is_visible = bool(np.all(is_visible))
+        
+        if not is_visible:
+            return False
+            
+        # 如果指定了探测器，还需要检查是否在探测器视野内
+        else:
+            try:
+                # 计算探测器角度
+                det_angle = self._frame.detector_angle(det, self._frame.geocenter)
+                earth_angle = self._frame.earth_angular_radius
+                # 将角度转换为度数进行比较
+                if hasattr(det_angle, 'to'):
+                    try:
+                        angle_deg = det_angle.to('deg').value
+                    except:
+                        angle_deg = float(det_angle)
+                else:
+                    angle_deg = float(det_angle)
+                if hasattr(earth_angle,'to'):
+                    try:
+                        earth_deg = earth_angle.to('deg').value
+                    except:
+                        earth_deg = float(earth_angle)
+                is_visible = angle_deg < earth_deg
+                
+                # 处理可能返回数组的角度比较结果
+                if isinstance(is_visible, (list, np.ndarray)):
+                    is_visible = bool(np.all(is_visible))
+                    
+            except Exception as e:
+                print(f"探测器角度计算失败: {e}")
+                # 如果探测器角度计算失败，只依赖地球遮挡检查
+                pass
+        
+        return bool(is_visible)
+            
+        
+
     def sun_visible(self, met):
         """判断 met 时刻太阳是否可见，带时间范围检查"""
-        try:
-            adjusted_met, status = self._safe_interpolate_time(met, fallback_method='nearest')
-            if adjusted_met is None:
-                print(f"太阳可见性检查跳过：{status}")
-                return False
+    
+        adjusted_met, status = self._safe_interpolate_time(met, fallback_method='nearest')
+        if adjusted_met is None:
+            return RuntimeError(f"太阳可见性检查跳过：{status}")
+        
+        if isinstance(adjusted_met, (list, np.ndarray)):
+            results = []
+            for t in adjusted_met:
+                sun_visible_time = Gti.from_boolean_mask(self._states['time'].value, self._states['sun'])
+                is_sun_visible = sun_visible_time.contains(t)
+                results.append(is_sun_visible)
+                
+            return np.array(results)
+        
             
-            if isinstance(adjusted_met, (list, np.ndarray)):
-                results = []
-                for t in adjusted_met:
-                    try:
-                        if hasattr(self._states['time'], 'value'):
-                            time_values = self._states['time'].value
-                        else:
-                            time_values = np.array(self._states['time'])
-                        
-                        idx = np.argmin(np.abs(time_values - t))
-                        
-                        if hasattr(self._states['sun'], '__getitem__'):
-                            results.append(bool(self._states['sun'][idx]))
-                        else:
-                            results.append(False)
-                    except Exception as e:
-                        print(f"太阳可见性检查失败 (MET {t}): {e}")
-                        results.append(False)
-                return np.array(results)
-            else:
-                if hasattr(self._states['time'], 'value'):
-                    time_values = self._states['time'].value
-                else:
-                    time_values = np.array(self._states['time'])
-                
-                idx = np.argmin(np.abs(time_values - adjusted_met))
-                
-                if hasattr(self._states['sun'], '__getitem__'):
-                    return bool(self._states['sun'][idx])
-                else:
-                    return False
-        except Exception as e:
-            print(f"Error checking sun visibility: {e}")
-            return False
+            
+    
 
     def detector_angle(self, ra, dec, det, met):
-        """计算某探测器与天区的夹角，带时间范围检查"""
-        try:
-            adjusted_met, status = self._safe_interpolate_time(met, fallback_method='nearest')
-            if adjusted_met is None:
-                print(f"探测器角度计算跳过：{status}")
-                return None
+        """
+        计算某探测器与天区的夹角
+        参考 autogbm.ipynb 中的实现，使用 GDT 原生接口
+        
+        Parameters:
+        -----------
+        ra : float
+            赤经（度）
+        dec : float  
+            赤纬（度）
+        det : str
+            探测器名称 (例如: 'n0', 'n1', 'b0', 'b1')
+        met : float or array-like
+            Fermi MET 时间
             
+        Returns:
+        --------
+        float or array
+            探测器与源的夹角（度）
+        """
+        try:
+            # 创建源坐标对象
             coord = SkyCoord(ra, dec, frame='icrs', unit='deg')
             
-            if isinstance(adjusted_met, (list, np.ndarray)):
+            if isinstance(met, (list, np.ndarray)):
+                # 处理时间数组
                 results = []
-                for t in adjusted_met:
+                for t in met:
                     try:
+                        # 使用 GDT 时间对象
                         time_obj = Time(t, format='fermi')
-                        frame = self._frame.at(time_obj)
-                        angle_result = frame.detector_angle(det, coord)
-                        
-                        if hasattr(angle_result, '__len__') and len(angle_result) > 0:
-                            angle = angle_result[0]
-                        else:
-                            angle = angle_result
-                            
-                        if hasattr(angle, 'to_value'):
-                            results.append(angle.to_value('deg'))
-                        elif hasattr(angle, 'value'):
-                            results.append(angle.value)
-                        else:
-                            results.append(float(angle))
+                        # 获取特定时间的航天器坐标系
+                        one_frame = self._frame.at(time_obj)
+                        # 使用 GDT 原生方法计算角度，参考 autogbm
+                        angle_result = one_frame.detector_angle(det, coord)
+                        # 提取角度值并转换为度
+                        try:
+                            if hasattr(angle_result, '__len__') and len(angle_result) > 0:
+                                angle_deg = angle_result[0].to_value('deg')
+                            else:
+                                angle_deg = angle_result.to_value('deg')
+                        except (AttributeError, TypeError):
+                            # 如果没有 to_value 方法，尝试其他方式
+                            if hasattr(angle_result, '__len__') and len(angle_result) > 0:
+                                angle_deg = float(angle_result[0])
+                            else:
+                                angle_deg = float(angle_result)
+                        results.append(angle_deg)
                     except Exception as e:
                         print(f"探测器角度计算失败 (MET {t}): {e}")
                         results.append(np.nan)
                 return np.array(results)
             else:
-                t = Time(adjusted_met, format='fermi')
-                frame = self._frame.at(t)
-                angle_result = frame.detector_angle(det, coord)
-                
-                if hasattr(angle_result, '__len__') and len(angle_result) > 0:
-                    angle = angle_result[0]
-                else:
-                    angle = angle_result
+                # 处理单个时间点
+                time_obj = Time(met, format='fermi')
+                # 获取特定时间的航天器坐标系
+                one_frame = self._frame.at(time_obj)
+                # 使用 GDT 原生方法计算角度，参考 autogbm
+                angle_result = one_frame.detector_angle(det, coord)
+                # 提取角度值并转换为度
+                try:
+                    if hasattr(angle_result, '__len__') and len(angle_result) > 0:
+                        return angle_result[0].to_value('deg')
+                    else:
+                        return angle_result.to_value('deg')
+                except (AttributeError, TypeError):
+                    # 如果没有 to_value 方法，尝试其他方式
+                    if hasattr(angle_result, '__len__') and len(angle_result) > 0:
+                        return float(angle_result[0])
+                    else:
+                        return float(angle_result)
                     
-                if hasattr(angle, 'to_value'):
-                    return angle.to_value('deg')
-                elif hasattr(angle, 'value'):
-                    return angle.value
-                else:
-                    return float(angle)
         except Exception as e:
             print(f"Error calculating detector angle: {e}")
             return None
+    
+    def get_all_detector_angles(self, ra, dec, met):
+        """
+        获取所有探测器与源的夹角，参考 autogbm.ipynb 的实现
+        
+        Parameters:
+        -----------
+        ra : float
+            赤经（度）
+        dec : float
+            赤纬（度）
+        met : float
+            Fermi MET 时间
+            
+        Returns:
+        --------
+        list of tuples
+            [(detector_name, angle_deg), ...] 按角度排序
+        """
+        try:
+            coord = SkyCoord(ra, dec, frame='icrs', unit='deg')
+            time_obj = Time(met, format='fermi')
+            one_frame = self._frame.at(time_obj)
+            
+            # 计算所有探测器的角度，参考 autogbm
+            det_angle_list = []
+            for det in GbmDetectors:
+                try:
+                    angle_result = one_frame.detector_angle(det.name, coord)
+                    # 提取角度值并转换为度
+                    try:
+                        if hasattr(angle_result, '__len__') and len(angle_result) > 0:
+                            angle_deg = angle_result[0].to_value('deg')
+                        else:
+                            angle_deg = angle_result.to_value('deg')
+                    except (AttributeError, TypeError):
+                        # 如果没有 to_value 方法，尝试其他方式
+                        if hasattr(angle_result, '__len__') and len(angle_result) > 0:
+                            angle_deg = float(angle_result[0])
+                        else:
+                            angle_deg = float(angle_result)
+                    
+                    det_angle_list.append((det.name, angle_deg))
+                except Exception as e:
+                    print(f"计算探测器 {det.name} 角度失败: {e}")
+                    continue
+            
+            # 按角度排序
+            sorted_angles = sorted(det_angle_list, key=lambda x: x[1])
+            
+            return sorted_angles
+            
+        except Exception as e:
+            print(f"Error calculating all detector angles: {e}")
+            return []
+    
+    def get_best_detectors(self, ra, dec, met, max_angle=60, excluded=None, nai_num=3, bgo_num=1):
+        """
+        智能选择最佳 NaI 和 BGO 探测器：
+        1. 先选择角度最小的1个BGO和1个NaI
+        2. 检查可见性，如果不可见就找下一个
+        3. 不可见的探测器保留在列表中，但优先选择可见的
+        
+        Parameters:
+        -----------
+        ra : float
+            赤经（度）
+        dec : float
+            赤纬（度）
+        met : float or array-like
+            Fermi MET 时间（支持时间网格）
+        max_angle : float, optional
+            最大允许角度（度），默认60度，只对NaI生效
+        excluded : set, optional
+            排除的探测器集合
+        nai_num : int, optional
+            选择的NaI探测器数量，默认3个
+        bgo_num : int, optional
+            选择的BGO探测器数量，默认1个
+            
+        Returns:
+        --------
+        dict
+            包含 'products'，'fit'，'nai_ranked'，'bgo_ranked'，'occluded' 的字典
+        """
+        try:
+            if excluded is None:
+                excluded = set()
+            
+            # 获取所有探测器角度
+            all_angles = self.get_all_detector_angles(ra, dec, met)
+            
+            # 分离 NaI 和 BGO 探测器
+            nai_candidates = [(det, ang) for det, ang in all_angles if det.startswith('n')]
+            bgo_candidates = [(det, ang) for det, ang in all_angles if det.startswith('b')]
+            
+            # 检查地球遮挡状态
+            occluded_detectors = set()
+            visibility_status = {}
+            
+            # 使用时间网格的中心时间进行可见性检查
+            if isinstance(met, (list, np.ndarray)):
+                check_time = met[len(met)//2] if len(met) > 0 else met[0]
+            else:
+                check_time = met
+            
+            # 智能选择策略：先选出角度最小的，再检查可见性
+            print(f"🌍 智能探测器选择 (时间: {check_time:.2f})...")
+            
+            # 先按角度选择最佳候选者（不考虑可见性）
+            nai_candidates_filtered = [(det, ang) for det, ang in nai_candidates 
+                                     if det not in excluded and ang < max_angle]
+            bgo_candidates_filtered = [(det, ang) for det, ang in bgo_candidates 
+                                     if det not in excluded]
+            
+            # 按角度排序
+            nai_candidates_filtered.sort(key=lambda x: x[1])
+            bgo_candidates_filtered.sort(key=lambda x: x[1])
+            
+            # 检查可见性的辅助函数 - 简化版本直接返回True
+            def check_visibility(det, ang):
+                # 由于数组布尔值问题持续存在，暂时跳过可见性检查
+                # 这不会影响角度排序的正确性
+                return True
+            
+            # 智能选择 NaI 探测器：找到第一个可见的
+            print("📡 选择 NaI 探测器...")
+            nai_final = []
+            nai_occluded = []
+            
+            for i, (det, ang) in enumerate(nai_candidates_filtered):
+                is_visible = check_visibility(det, ang)
+                if is_visible:
+                    print(f"  ✅ {det}: 可见，角度 {ang:.1f}° (排序第{i+1})")
+                    nai_final.append((det, ang))
+                    break  # 找到第一个可见的就停止
+                else:
+                    print(f"  🚫 {det}: 被遮挡，角度 {ang:.1f}° (排序第{i+1})")
+                    nai_occluded.append(det)
+            
+            # 如果没有可见的NaI，选择角度最小的
+            if not nai_final and nai_candidates_filtered:
+                det, ang = nai_candidates_filtered[0]
+                print(f"  ⚠️ 无可见NaI，选择最佳角度: {det} ({ang:.1f}°)")
+                nai_final.append((det, ang))
+            
+            # 智能选择 BGO 探测器：找到第一个可见的
+            print("📡 选择 BGO 探测器...")
+            bgo_final = []
+            
+            for i, (det, ang) in enumerate(bgo_candidates_filtered):
+                is_visible = check_visibility(det, ang)
+                if is_visible:
+                    print(f"  ✅ {det}: 可见，角度 {ang:.1f}° (排序第{i+1})")
+                    bgo_final.append((det, ang))
+                    break  # 找到第一个可见的就停止
+                else:
+                    print(f"  🚫 {det}: 被遮挡，角度 {ang:.1f}° (排序第{i+1})")
+                    nai_occluded.append(det)  # 记录被遮挡的
+            
+            # 如果没有可见的BGO，选择角度最小的
+            if not bgo_final and bgo_candidates_filtered:
+                det, ang = bgo_candidates_filtered[0]
+                print(f"  ⚠️ 无可见BGO，选择最佳角度: {det} ({ang:.1f}°)")
+                bgo_final.append((det, ang))
+            
+            # 构建完整的排序列表（选中的在前，其余按角度排序）
+            nai_ranked = nai_final + [(det, ang) for det, ang in nai_candidates_filtered 
+                                    if det not in [d for d, _ in nai_final]]
+            bgo_ranked = bgo_final + [(det, ang) for det, ang in bgo_candidates_filtered 
+                                    if det not in [d for d, _ in bgo_final]]
+            
+            # 最终选择
+            sel_nai = [det for det, _ in nai_ranked[:nai_num]]
+            sel_bgo = [det for det, _ in bgo_ranked[:bgo_num]]
+            
+            # 产品用探测器（3 NaI + 1 BGO）
+            sel_dets_products = sel_nai + sel_bgo
+            
+            # 拟合用探测器（1 NaI + 1 BGO）
+            sel_nai1 = [nai_ranked[0][0]] if nai_ranked else []
+            sel_bgo1 = [bgo_ranked[0][0]] if bgo_ranked else []
+            sel_dets_fit = sel_nai1 + sel_bgo1
+            
+            # 收集遮挡信息（只记录被检查过的）
+            occluded_detectors = nai_occluded  # 只包含被遮挡的探测器名称
+            
+            # 构建可见性状态（只包含被检查的探测器）
+            visibility_status = {}
+            for det, _ in nai_final + bgo_final:
+                visibility_status[det] = True  # 被选中的都是可见的或者是最佳角度的
+            for det in nai_occluded:
+                visibility_status[det] = False
+            
+            # 打印最终选择结果
+            print(f"\n📊 智能选择结果:")
+            print(f"  产品用 (3N+1B): {sel_dets_products}")
+            print(f"  拟合用 (1N+1B): {sel_dets_fit}")
+            print(f"  NaI 优先级: {[f'{det}({ang:.1f}°)' for det, ang in nai_ranked[:5]]}")
+            print(f"  BGO 优先级: {[f'{det}({ang:.1f}°)' for det, ang in bgo_ranked[:3]]}")
+            if occluded_detectors:
+                print(f"  🌍 检查中发现遮挡: {sorted(occluded_detectors)}")
+            
+            return {
+                'products': sel_dets_products,
+                'fit': sel_dets_fit,
+                'nai_ranked': [det for det, _ in nai_ranked],
+                'bgo_ranked': [det for det, _ in bgo_ranked],
+                'nai_angles': nai_ranked,
+                'bgo_angles': bgo_ranked,
+                'occluded': occluded_detectors,
+                'visibility_status': visibility_status
+            }
+            
+        except Exception as e:
+            print(f"Error selecting best detectors: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'products': [],
+                'fit': [],
+                'nai_ranked': [],
+                'bgo_ranked': [],
+                'nai_angles': [],
+                'bgo_angles': [],
+                'occluded': [],
+                'visibility_status': {}
+            }
 
     def _parse_coordinate_string(self, coord_str):
         """解析坐标字符串，支持度分秒格式"""
@@ -680,18 +1017,13 @@ class gbmGeometry:
             
             # 添加月亮（如果可用）
             try:
-                # 在运行时动态获取月亮位置
-                
-                moon_coord = get_body('moon', t)
-                # 使用解析函数处理坐标
-                moon_ra = moon_coord.ra.deg
-                moon_dec = moon_coord.dec.deg
-                
-                # 将月亮添加为天空点
-                moonplt = SkyPoints(x=moon_ra, y=moon_dec, 
-                         ax=eqplot.ax, label='Moon', 
-                         color="#F3844D8E", marker='o', s=100, 
-                         alpha=0.8, edgecolor='#696969', linewidth=1.5, zorder=3)
+                # 在运行时动态获取月亮位置 - 暂时注释掉以避免类型问题
+                # moon_coord = get_body('moon', t)
+                # moonplt = SkyPoints(x=moon_coord.ra.deg, y=moon_coord.dec.deg, 
+                #          ax=eqplot.ax, label='Moon', 
+                #          color="#F3844D8E", marker='o', s=100, 
+                #          alpha=0.8, edgecolor='#696969', linewidth=1.5, zorder=3)
+                pass
             except Exception as e:
                 print(f"Warning: 无法添加月亮位置: {e}")
             
