@@ -6,8 +6,10 @@ import pandas as pd
 from astropy.time import Time, TimeDelta
 from .filefinder import FileFinder
 from ..util.data import msg_format
-import os 
-
+import os
+from gdt.missions.fermi.gbm.finders import ContinuousFinder
+from pathlib import Path
+_UNSET = object()
 
 class Retrieve(object):
     
@@ -92,90 +94,135 @@ class gbmRetrieve(Retrieve):
 
 
     @classmethod
-    def from_utc(cls, utc, t1, t2, datapath=None, skip_tte=False, skip_poshist=False):
-        
-        if datapath is None:
-            home = os.environ.get("HOME")
-            if home is None:
-                raise EnvironmentError("HOME environment variable is not set.")
-            datapath = os.path.join(home ,'research/Data/fermi/data/gbm/daily')
+    def from_utc(cls, utc, t1, t2,  datapath: Path| str , skip_tte=False, skip_poshist=False, use_gdt=True ):
+        if use_gdt:
+            if datapath is _UNSET:
+                home = os.environ.get("HOME")
+                if home is None:
+                    raise EnvironmentError("HOME environment variable is not set.")
+                datapath = os.path.join(home, 'research/Data/fermi/data/gbm/daily')
+
+            datapath = Path(datapath).expanduser().resolve()
+
+
+            if isinstance(utc, Time) == False:
+                utc = Time(utc, format='isot', scale='utc')
+
+
+            t1 = TimeDelta(t1, format='sec')
+            t2 = TimeDelta(t2, format='sec')
+
+            tstart = utc + t1
+            tstop = utc + t2
+
+            dt1 = tstart.datetime
+            dt2 = tstop.datetime
+            dt_utc = utc.datetime
+
+            time_range  = tstop - tstart
+
+            if time_range.sec > 3600:
+                msg = 'the time range is too long'
+                warnings.warn(msg_format(msg), UserWarning, stacklevel=2)
             
-        dataurl = 'ftp://129.164.179.23/fermi/data/gbm/daily'
-        
-        ff = FileFinder(local_dir=datapath, ftp_url=dataurl)
+            if not dt1.hour == dt2.hour:
+                msg = 'tstart 与 tstop 不在同一小时'
+                warnings.warn(msg_format(msg), UserWarning, stacklevel=2)
 
-        if isinstance(utc, Time) == False:
-            utc = Time(utc, format='isot', scale='utc')
 
-        t1 = TimeDelta(t1, format='sec')
-        t2 = TimeDelta(t2, format='sec')
+            finder = ContinuousFinder(utc)
+            if not skip_tte:
+                tte_dict = [str(p.resolve()) for p in finder.get_tte(download_dir=datapath)]
 
-        tstart = utc + t1
-        tstop = utc + t2
+            if not skip_poshist:
+                # 直接下载并返回已保存文件路径；由于 datapath 已绝对化，这里也会是绝对路径
+                poshist_list = [str(p.resolve()) for p in finder.get_poshist(download_dir=datapath)]
+            
 
-        year_start, month_start, day_start, hour_start = list(tstart.ymdhms)[:4]
-        year_stop, month_stop, day_stop, hour_stop = list(tstop.ymdhms)[:4]
-        start = '%d-%02d-%02d %02d' % (year_start, month_start, day_start, hour_start)+':00:00'
-        stop = '%d-%02d-%02d %02d' % (year_stop, month_stop, day_stop, hour_stop) + ':00:00'
-        dates_perH = pd.date_range(start, stop, freq='h')
-        dates_perD = pd.date_range(start[:10], stop[:10], freq='D')
 
-        if len(dates_perH) > 2:
-            msg = 'the time range is too long'
-            warnings.warn(msg_format(msg), UserWarning, stacklevel=2)
+        else:
+            if datapath is _UNSET:
+                home = os.environ.get("HOME")
+                if home is None:
+                    raise EnvironmentError("HOME environment variable is not set.")
+                datapath = os.path.join(home, 'research/Data/fermi/data/gbm/daily')
 
-        poshist_list = []
-        dets = ['n0','n1','n2','n3','n4','n5','n6','n7','n8','n9','na','nb','b0','b1']
-        tte_dict = {det:[] for det in dets}
-        # cspec_pha_dict = {det:[] for det in dets}
-        # ctime_pha_dict = {det:[] for det in dets}
+            dataurl = 'ftp://129.164.179.23/fermi/data/gbm/daily'
+            
+            ff = FileFinder(local_dir=datapath, ftp_url=dataurl)
 
-        if not skip_tte:
-            for date in dates_perH:
-                year = '%d' % date.year
-                month = '%.2d' % date.month
-                day = '%.2d' % date.day
-                hour = '%.2d' % date.hour
+            if isinstance(utc, Time) == False:
+                utc = Time(utc, format='isot', scale='utc')
 
-                local_dir = datapath + '/' + year + '/' + month + '/' + day + '/current'
-                if not os.path.isdir(local_dir): os.makedirs(local_dir)
-                
-                ftp_url = dataurl + '/' + year + '/' + month + '/' + day + '/current'
-                
-                ff.local_dir = local_dir
-                ff.ftp_url = ftp_url
+            t1 = TimeDelta(t1, format='sec')
+            t2 = TimeDelta(t2, format='sec')
 
-                for det in dets:
-                    tte_feature = 'glg_tte_' + det + '_' + year[-2:] + month + day + '_' + hour + 'z_v*fit.gz'
-                    tte_file = ff.find(tte_feature)
-                    tte_dict[det].append(tte_file[-1] if tte_file else None)
+            tstart = utc + t1
+            tstop = utc + t2
 
-        if not skip_poshist:
-            for date in dates_perD:
-                year = '%d' % date.year
-                month = '%.2d' % date.month
-                day = '%.2d' % date.day
+            year_start, month_start, day_start, hour_start = list(tstart.ymdhms)[:4]
+            year_stop, month_stop, day_stop, hour_stop = list(tstop.ymdhms)[:4]
+            start = '%d-%02d-%02d %02d' % (year_start, month_start, day_start, hour_start)+':00:00'
+            stop = '%d-%02d-%02d %02d' % (year_stop, month_stop, day_stop, hour_stop) + ':00:00'
+            dates_perH = pd.date_range(start, stop, freq='h')
+            dates_perD = pd.date_range(start[:10], stop[:10], freq='D')
 
-                local_dir = datapath + '/' + year + '/' + month + '/' + day + '/current'
-                if not os.path.isdir(local_dir): os.makedirs(local_dir)
-                
-                ftp_url = dataurl + '/' + year + '/' + month + '/' + day + '/current'
-                
-                ff.local_dir = local_dir
-                ff.ftp_url = ftp_url
-                
-                # for det in dets:
-                #     cspec_feature = 'glg_cspec_' + det + '_' + year[-2:] + month + day + '_v*pha'
-                #     cspec_file = ff.find(cspec_feature)
-                #     cspec_pha_dict[det].append(cspec_file[-1] if cspec_file else None)
+            if len(dates_perH) > 2:
+                msg = 'the time range is too long'
+                warnings.warn(msg_format(msg), UserWarning, stacklevel=2)
 
-                #     ctime_feature = 'glg_ctime_' + det + '_' + year[-2:] + month + day + '_v*pha'
-                #     ctime_file = ff.find(ctime_feature)
-                #     ctime_pha_dict[det].append(ctime_file[-1] if ctime_file else None)
+            poshist_list = []
+            dets = ['n0','n1','n2','n3','n4','n5','n6','n7','n8','n9','na','nb','b0','b1']
+            tte_dict = {det:[] for det in dets}
+            # cspec_pha_dict = {det:[] for det in dets}
+            # ctime_pha_dict = {det:[] for det in dets}
 
-                poshist_feature = 'glg_poshist_all_' + year[-2:] + month + day + '_v*fit'
-                poshist_file = ff.find(poshist_feature)
-                poshist_list.append(poshist_file[-1] if poshist_file else None)
+            if not skip_tte:
+                for date in dates_perH:
+                    year = '%d' % date.year
+                    month = '%.2d' % date.month
+                    day = '%.2d' % date.day
+                    hour = '%.2d' % date.hour
+
+                    local_dir = datapath + '/' + year + '/' + month + '/' + day + '/current'
+                    if not os.path.isdir(local_dir): os.makedirs(local_dir)
+                    
+                    ftp_url = dataurl + '/' + year + '/' + month + '/' + day + '/current'
+                    
+                    ff.local_dir = local_dir
+                    ff.ftp_url = ftp_url
+
+                    for det in dets:
+                        tte_feature = 'glg_tte_' + det + '_' + year[-2:] + month + day + '_' + hour + 'z_v*fit.gz'
+                        tte_file = ff.find(tte_feature)
+                        tte_dict[det].append(tte_file[-1] if tte_file else None)
+
+            if not skip_poshist:
+                for date in dates_perD:
+                    year = '%d' % date.year
+                    month = '%.2d' % date.month
+                    day = '%.2d' % date.day
+
+                    local_dir = datapath + '/' + year + '/' + month + '/' + day + '/current'
+                    if not os.path.isdir(local_dir): os.makedirs(local_dir)
+                    
+                    ftp_url = dataurl + '/' + year + '/' + month + '/' + day + '/current'
+                    
+                    ff.local_dir = local_dir
+                    ff.ftp_url = ftp_url
+                    
+                    # for det in dets:
+                    #     cspec_feature = 'glg_cspec_' + det + '_' + year[-2:] + month + day + '_v*pha'
+                    #     cspec_file = ff.find(cspec_feature)
+                    #     cspec_pha_dict[det].append(cspec_file[-1] if cspec_file else None)
+
+                    #     ctime_feature = 'glg_ctime_' + det + '_' + year[-2:] + month + day + '_v*pha'
+                    #     ctime_file = ff.find(ctime_feature)
+                    #     ctime_pha_dict[det].append(ctime_file[-1] if ctime_file else None)
+
+                    poshist_feature = 'glg_poshist_all_' + year[-2:] + month + day + '_v*fit'
+                    poshist_file = ff.find(poshist_feature)
+                    poshist_list.append(poshist_file[-1] if poshist_file else None)
 
         rtv_res = {'utc': utc.value, 't1': t1.value, 't2': t2.value, 'datapath': datapath, 
                    'tte': tte_dict, 'poshist': poshist_list}
