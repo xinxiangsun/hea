@@ -12,13 +12,17 @@ _Heapy_ will invoke certain software and commands from HEASoft, such as `xselect
 
 _Heapy_ generates the response matrix files for Fermi GBM by invoking [`gbm_drm_gen`](https://github.com/grburgess/gbm_drm_gen). It is recommended to install my forked Python packages, which have been fine-tuned to resolve compatibility issues with newer versions of `numpy` and `astropy`, and to use TTE data instead of CSPEC data. The specific installation procedure is as follows:
 
+```
 git clone https://github.com/xinxiangsun/responsum.git
 pip install ./responsum
+
 git clone https://github.com/xinxiangsun/gbmgeometry.git
 pip install ./gbmgeometry
 
 git clone https://github.com/xinxiangsun/gbm_drm_gen.git
 pip install ./gbm_drm_gen
+```
+
 
 ## Installation
 
