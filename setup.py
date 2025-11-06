@@ -1,3 +1,9 @@
+'''
+Date: 2025-09-12 15:18:55
+LastEditors: Xinxiang Sun sunxx@nao.cas.cn
+LastEditTime: 2025-10-11 14:35:25
+FilePath: /research/software/hea/setup.py
+'''
 from pathlib import Path
 from setuptools import setup, find_packages
 
@@ -48,6 +54,6 @@ setup(
         ]
     },
     project_urls={
-        "Source Code": "https://github.com/jyangch/heapy"
+        "Source Code": "https://github.com/xinxiangsun/hea"
     }
 )
